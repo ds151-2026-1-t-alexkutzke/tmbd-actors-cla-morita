@@ -1,6 +1,15 @@
-import { useLocalSearchParams } from 'expo-router';
+import { Link, useLocalSearchParams } from 'expo-router';
 import { useState, useEffect } from 'react';
-import { View, Text, Image, StyleSheet, ActivityIndicator, ScrollView } from 'react-native';
+import {
+  View,
+  Text,
+  Image,
+  StyleSheet,
+  ActivityIndicator,
+  ScrollView,
+  FlatList,
+  Pressable,
+} from 'react-native';
 import { api } from '../../src/api/tmdb';
 
 interface MovieDetails {
@@ -11,17 +20,30 @@ interface MovieDetails {
   runtime: number;
 }
 
+interface CastMember {
+  id: number;
+  name: string;
+  character: string;
+  profile_path: string | null;
+}
+
 export default function MovieDetailsScreen() {
   // Captura o parâmetro '[id]' do nome do arquivo
   const { id } = useLocalSearchParams();
   const [movie, setMovie] = useState<MovieDetails | null>(null);
+  const [cast, setCast] = useState<CastMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchMovieDetails = async () => {
       try {
-        const response = await api.get(`/movie/${id}`);
-        setMovie(response.data);
+        const [movieResponse, creditsResponse] = await Promise.all([
+          api.get(`/movie/${id}`),
+          api.get(`/movie/${id}/credits`),
+        ]);
+
+        setMovie(movieResponse.data);
+        setCast((creditsResponse.data.cast || []).slice(0, 10));
       } catch (error) {
         console.error('Erro ao buscar detalhes:', error);
       } finally {
@@ -69,6 +91,41 @@ export default function MovieDetailsScreen() {
         <Text style={styles.overview}>
           {movie.overview || 'Sinopse não disponível para este filme.'}
         </Text>
+
+        <Text style={styles.sectionTitle}>Elenco principal</Text>
+        {cast.length > 0 ? (
+          <FlatList
+            data={cast}
+            horizontal
+            keyExtractor={(item) => item.id.toString()}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.castList}
+            renderItem={({ item }) => (
+              <Link href={`/actor/${item.id}`} asChild>
+                <Pressable style={styles.castCard}>
+                  {item.profile_path ? (
+                    <Image
+                      source={{ uri: `https://image.tmdb.org/t/p/w185${item.profile_path}` }}
+                      style={styles.castImage}
+                    />
+                  ) : (
+                    <View style={styles.castPlaceholder}>
+                      <Text style={styles.placeholderText}>Sem foto</Text>
+                    </View>
+                  )}
+                  <Text style={styles.castName} numberOfLines={2}>
+                    {item.name}
+                  </Text>
+                  <Text style={styles.castCharacter} numberOfLines={2}>
+                    {item.character || 'Personagem não informado'}
+                  </Text>
+                </Pressable>
+              </Link>
+            )}
+          />
+        ) : (
+          <Text style={styles.emptyText}>Elenco não disponível.</Text>
+        )}
       </View>
     </ScrollView>
   );
@@ -85,4 +142,24 @@ const styles = StyleSheet.create({
   sectionTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold', marginBottom: 8 },
   overview: { color: '#D1D5DB', fontSize: 16, lineHeight: 24 },
   errorText: { color: '#FFFFFF', fontSize: 18 },
+  castList: { paddingVertical: 8 },
+  castCard: { width: 110, marginRight: 12 },
+  castImage: {
+    width: 110,
+    height: 165,
+    borderRadius: 12,
+    backgroundColor: '#333333',
+  },
+  castPlaceholder: {
+    width: 110,
+    height: 165,
+    borderRadius: 12,
+    backgroundColor: '#333333',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  castName: { color: '#FFFFFF', fontSize: 14, fontWeight: '700', marginTop: 8 },
+  castCharacter: { color: '#9CA3AF', fontSize: 12, marginTop: 4 },
+  placeholderText: { color: '#9CA3AF', fontSize: 12 },
+  emptyText: { color: '#9CA3AF', fontSize: 14, marginTop: 4 },
 });
